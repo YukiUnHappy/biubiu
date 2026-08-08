@@ -1,0 +1,102 @@
+name: MEGAsync Build
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Checkout MEGAsync (Official Tag)
+        uses: actions/checkout@v7
+        with:
+          repository: meganz/MEGAsync
+          ref: v6.5.1.0_Win
+          path: MEGAsync
+
+      - name: Fix and Fetch Submodules
+        working-directory: MEGAsync
+        shell: bash
+        run: |
+          git rm --cached src/DesignTokensImporter/megadesignassets
+          git submodule update --init --recursive --depth 1
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
+      - name: Install Qt 5.15.2
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 5.15.2
+          arch: win64_msvc2019_64
+          cache: true
+
+      - name: Apply Patches
+        shell: bash
+        run: |
+          mkdir vcpkg_cache
+          cd MEGAsync
+          git apply --ignore-whitespace "${{ github.workspace }}/MEGASync.patch"
+          cd src/MEGASync/mega
+          git apply --ignore-whitespace "${{ github.workspace }}/SDK.patch"
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/vcpkg_cache
+          key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vcpkg-
+
+      # - name: Just generate
+      #   working-directory: MEGAsync
+      #   shell: cmd
+      #   env:
+      #     VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg_cache
+      #   run: |
+      #     cmake ^
+      #      	-G "Visual Studio 17 2022" ^
+      #      	-A x64 ^
+      #      	-DCMAKE_SYSTEM_VERSION=10.0.22621.0 ^
+      #      	-DCMAKE_VERBOSE_MAKEFILE="ON" ^
+      #      	-DENABLE_DESIGN_TOKENS_IMPORTER="OFF" ^
+      #      	-DENABLE_DESKTOP_APP_TESTS="OFF" ^
+      #      	-DCMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO=ON ^
+      #      	-DCMAKE_CXX_FLAGS_RELWITHDEBINFO="/Gw /GS- /O2 /Ob2 /DNDEBUG /utf-8" ^
+      #      	-DCMAKE_C_FLAGS_RELWITHDEBINFO="/Gw /GS- /O2 /Ob2 /DNDEBUG /utf-8" ^
+      #      	-DCMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO="/INCREMENTAL:NO /PDBALTPATH:%25_PDB%25 /OPT:ICF=3 /OPT:REF" ^
+      #      	-DVCPKG_ROOT=%VCPKG_INSTALLATION_ROOT% ^
+      #      	-DCMAKE_PREFIX_PATH=%QT_ROOT_DIR% ^
+      #      	-DCMAKE_C_COMPILER_LAUNCHER=sccache ^
+      #      	-DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
+      #      	-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded ^
+      #      	-DCMAKE_POLICY_DEFAULT_CMP0141=NEW ^
+      #      	-DUSE_FFMPEG=OFF -DUSE_PDFIUM=OFF ^
+      #      	-S . ^
+      #      	-B build-x64-windows-mega
+
+      # - uses: actions/upload-artifact@v7
+      #   with:
+      #     path: MEGAsync/build-x64-windows-mega/src
+
+      - name: Run Official Build Script
+        working-directory: MEGAsync
+        shell: cmd
+        env:
+          VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg_cache
+          MEGA_QTPATH: ${{ env.QT_ROOT_DIR }}
+        run: |
+          set MEGA_VCPKGPATH=%VCPKG_INSTALLATION_ROOT%
+          full_build_process.cmd 64 0
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: MEGAsync/build-x64-windows-mega/src/MEGASync/RelWithDebInfo/MEGASync.*

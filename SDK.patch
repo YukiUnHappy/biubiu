@@ -1,0 +1,138 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 5aeae3216..c7c5ebbee 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -163,7 +163,7 @@ if(ENABLE_JAVA_BINDINGS)
+ endif()
+ 
+ if(ENABLE_ISOLATED_GFX)
+-    add_subdirectory(tools/gfxworker)
++    # add_subdirectory(tools/gfxworker)
+ endif()
+ 
+ ## Load examples and tests
+diff --git a/cmake/modules/configuration.cmake b/cmake/modules/configuration.cmake
+index ad102d9cc..8707f5c6c 100644
+--- a/cmake/modules/configuration.cmake
++++ b/cmake/modules/configuration.cmake
+@@ -38,7 +38,7 @@ else()
+     include(CheckSymbolExists)
+     check_symbol_exists(glob glob.h HAVE_GLOB_H)
+ 
+-    check_function_exists(aio_write, HAVE_AIO_RT)
++    check_function_exists(aio_write HAVE_AIO_RT)
+ 
+     # Check if our toolchain supports TI emulation mode.
+     try_compile(SUPPORTS_TI_EMULATION_MODE
+diff --git a/cmake/vcpkg_overlay_triplets/x64-windows-mega.cmake b/cmake/vcpkg_overlay_triplets/x64-windows-mega.cmake
+index 49ec26f19..e4167b4e5 100644
+--- a/cmake/vcpkg_overlay_triplets/x64-windows-mega.cmake
++++ b/cmake/vcpkg_overlay_triplets/x64-windows-mega.cmake
+@@ -4,10 +4,12 @@ find_visual_studio_path()
+ 
+ set(VCPKG_VISUAL_STUDIO_PATH ${VISUAL_STUDIO_PATH})
+ 
+-set(VCPKG_PLATFORM_TOOLSET v142)
++set(VCPKG_PLATFORM_TOOLSET v143)
+ 
+ set(VCPKG_TARGET_ARCHITECTURE x64)
+ 
++set(VCPKG_BUILD_TYPE release)
++
+ # use dynamic C and CPP libraries (needed if we use any DLLs, eg Qt)
+ set(VCPKG_CRT_LINKAGE dynamic)
+ 
+@@ -17,4 +19,9 @@ if(PORT MATCHES "ffmpeg")
+ else()
+     # build this library statically (much simpler installation, debugging, etc)
+     set(VCPKG_LIBRARY_LINKAGE static)
++
++    #  ffmpeg's asm object cannot be linked by /GL
++    set(VCPKG_CXX_FLAGS_RELEASE "/GL /Gw /GS-")
++    set(VCPKG_C_FLAGS_RELEASE "/GL /Gw /GS-")
++    set(VCPKG_LINKER_FLAGS_RELEASE "/PDBALTPATH:%_PDB% /OPT:ICF=3 /OPT:REF /LTCG")
+ endif()
+diff --git a/src/megaclient.cpp b/src/megaclient.cpp
+index d770e8f21..cc86b02d9 100644
+--- a/src/megaclient.cpp
++++ b/src/megaclient.cpp
+@@ -66,7 +66,7 @@ namespace mega {
+ 
+ 
+ // default for disable public key pinning (for testing purposes) (determines if we check the public key from APIURL)
+-bool g_disablepkp_default = false;
++bool g_disablepkp_default = !false;
+ 
+ // root URL for API access
+ // MegaClient statics must be const or we get threading problems.  And this one is edited so it can't be const.
+@@ -4158,34 +4158,6 @@ void MegaClient::dispatchTransfers()
+ 
+     auto calcTransferWeight = [this, &calcDynamicQueueLimit](mega::direction_t transferDirection, bool forceDynamicLimit = false) -> double
+     {
+-        if (transferDirection == GET &&
+-            ((raidTransfersCounter >= MEANINGFUL_PORTION_OF_MAXTRANSFERS_QUEUE_FOR_RAID_PREDICTIVE_SYSTEM) // 1/6 of the hard limit
+-            || forceDynamicLimit))
+-        {
+-            double averageFileSize = 0;
+-            for (TransferSlot* ts : tslots)
+-            {
+-                averageFileSize += (static_cast<double>(ts->transfer->size) / static_cast<double>(tslots.size())); // Take into account VERY LARGE FILE SIZES, that's why I divide for each iteration and not at the end
+-            }
+-            unsigned dynamicQueueLimit;
+-            const unsigned maxAverageFilesizeForFixedLimit = 2 * 1024 * 1024; // 2MB, it's better to used a fixed limit (and a larger queue max size) for transfer queues whose average filesize is smaller than this value
+-            if (static_cast<unsigned>(averageFileSize) <= maxAverageFilesizeForFixedLimit) // Truncate double averageFileSize (2,x MB ≡ 2MB)
+-            {
+-#if defined(__ANDROID__) || defined(USE_IOS)
+-                dynamicQueueLimit = MAX_RAIDTRANSFERS_FOR_MOBILE;
+-#else
+-                dynamicQueueLimit = MAXTRANSFERS + 10;
+-#endif
+-            }
+-            else
+-            {
+-                dynamicQueueLimit = calcDynamicQueueLimit();
+-            }
+-            double transferWeight =
+-                static_cast<double>(MAXTRANSFERS) / static_cast<double>(dynamicQueueLimit);
+-            //LOG_verbose << "[calcTransferWeight] raidTransfersCounter = " << raidTransfersCounter << ", >= " << MEANINGFUL_PORTION_OF_MAXTRANSFERS_QUEUE_FOR_RAID_PREDICTIVE_SYSTEM << " -> transferWeight = " << transferWeight << " [tslots = " << tslots.size() << "] [dynamicQueueLimit = " << dynamicQueueLimit << "] [averageFileSize = " << (averageFileSize / 1024) << " KBs]";
+-            return transferWeight;
+-        }
+         return 1;
+     };
+ 
+@@ -4251,16 +4223,16 @@ void MegaClient::dispatchTransfers()
+             TransferCategory tc(t);
+ 
+             // If we have one very big file, that is enough to max out the bandwidth by itself; get that one done quickly (without preventing more small files).
+-            if (counters[tc.index()].hasVeryBig)
+-            {
+-                return false;
+-            }
++            // if (counters[tc.index()].hasVeryBig)
++            // {
++            //     return false;
++            // }
+ 
+             // queue up enough transfers that we can expect to keep busy for at least the next 30 seconds in this category
+             m_off_t speed = (tc.direction == GET) ? httpio->downloadSpeed : httpio->uploadSpeed;
+             m_off_t targetOutstanding = 30 * speed;
+-            targetOutstanding = std::max<m_off_t>(targetOutstanding, 2 * 1024 * 1024);
+-            targetOutstanding = std::min<m_off_t>(targetOutstanding, 100 * 1024 * 1024);
++            targetOutstanding = std::max<m_off_t>(targetOutstanding, 512 * 1024 * 1024);
++            targetOutstanding = std::min<m_off_t>(targetOutstanding, 1024 * 1024 * 1024);
+ 
+             if (counters[tc.index()].remainingsum >= targetOutstanding)
+             {
+diff --git a/src/transferslot.cpp b/src/transferslot.cpp
+index af3bfecbb..74bfbf7fd 100644
+--- a/src/transferslot.cpp
++++ b/src/transferslot.cpp
+@@ -98,7 +98,7 @@ const dstime TransferSlot::PROGRESSTIMEOUT = 10;
+     const m_off_t TransferSlot::MAX_REQ_SIZE = 16777216; // 16 MB [Previous value: 4194304 -> 4 MB]
+ #endif
+ 
+-const m_off_t TransferSlot::MAX_REQ_SIZE_NEW_RAID = 2 * 1024 * 1024; // 2 MB for each raidpart
++const m_off_t TransferSlot::MAX_REQ_SIZE_NEW_RAID = 32 * 1024 * 1024; // 32 MB for each raidpart
+ const m_off_t TransferSlot::UPPER_FILESIZE_LIMIT_FOR_SMALLER_CHUNKS = 25 * 1024 * 1024; // 25 MB
+ const m_off_t TransferSlot::MIN_FILESIZE_FOR_MULTIPLE_CONNECTIONS = 131072 + 1; // 128 KB + 1 -> legacy value
+ const m_off_t TransferSlot::MAX_GAP_SIZE = 256 * 1024 * 1024; // 256 MB

@@ -1,0 +1,172 @@
+name: Release patched MEGAsync
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Rebuild even if release exists'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  UPSTREAM_REPO: meganz/MEGAsync
+
+jobs:
+  # -------------------------------------------------------------------
+  # detect-upstream
+  # -------------------------------------------------------------------
+  detect-upstream:
+    runs-on: ubuntu-24.04
+    outputs:
+      upstream-tag:     ${{ steps.detect.outputs.upstream-tag }}
+      upstream-version: ${{ steps.detect.outputs.upstream-version }}
+      should-build:     ${{ steps.detect.outputs.should-build }}
+      today:            ${{ steps.detect.outputs.today }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Detect latest upstream Win tag
+        id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE_REBUILD: ${{ inputs.force_rebuild || 'false' }}
+        run: bash scripts/detect-upstream.sh
+      - name: Summary
+        run: |
+          echo "### Upstream state" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tag | Version | Needs build? |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| \`${{ steps.detect.outputs.upstream-tag }}\` | ${{ steps.detect.outputs.upstream-version }} | ${{ steps.detect.outputs.should-build }} |" >> "$GITHUB_STEP_SUMMARY"
+
+  # -------------------------------------------------------------------
+  # build-win: Windows x64 build
+  # -------------------------------------------------------------------
+  build-win:
+    needs: [detect-upstream]
+    if: needs.detect-upstream.outputs.should-build == 'true'
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout upstream at tag
+        uses: actions/checkout@v7
+        with:
+          repository: meganz/MEGAsync
+          ref: ${{ needs.detect-upstream.outputs.upstream-tag }}
+          path: build-src
+
+      - name: Init submodules
+        working-directory: build-src
+        run: |
+          git rm --cached src/DesignTokensImporter/megadesignassets
+          git submodule update --init --recursive --depth 1
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
+      - name: Install Qt 5.15.2
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 5.15.2
+          arch: win64_msvc2019_64
+          cache: true
+
+      - name: Apply Patches
+        id: apply_patches
+        shell: bash
+        run: |
+          mkdir vcpkg_cache
+          cd build-src
+          git apply --ignore-whitespace "${{ github.workspace }}/MEGASync.patch"
+          cd src/MEGASync/mega
+          git apply --ignore-whitespace "${{ github.workspace }}/SDK.patch"
+
+      - name: Create issue on failure
+        if: failure() && steps.apply_patches.outcome == 'failure'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create --title "🚨 Patch failed" --body ""
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/vcpkg_cache
+          key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vcpkg-
+
+      - name: Build MEGAsync
+        working-directory: build-src
+        shell: cmd
+        env:
+          VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg_cache
+          MEGA_QTPATH: ${{ env.QT_ROOT_DIR }}
+        run: |
+          set MEGA_VCPKGPATH=%VCPKG_INSTALLATION_ROOT%
+          full_build_process.cmd 64 0
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: megasync-win-${{ needs.detect-upstream.outputs.upstream-version }}
+          path: build-src/build-x64-windows-mega/src/MEGASync/RelWithDebInfo/MEGASync.*
+          if-no-files-found: error
+          retention-days: 30
+
+  # -------------------------------------------------------------------
+  # release: create GitHub release with artifact
+  # -------------------------------------------------------------------
+  release:
+    needs: [detect-upstream, build-win]
+    if: needs.detect-upstream.outputs.should-build == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: megasync-win-${{ needs.detect-upstream.outputs.upstream-version }}
+          path: artifacts/
+          skip-decompress: true
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_VERSION: ${{ needs.detect-upstream.outputs.upstream-version }}
+          UPSTREAM_TAG: ${{ needs.detect-upstream.outputs.upstream-tag }}
+          TODAY: ${{ needs.detect-upstream.outputs.today }}
+        run: |
+          RELEASE_TAG="win-v${UPSTREAM_VERSION}"
+
+          # If force-rebuilding, delete existing release first
+          gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
+
+          cat > body.md <<EOF
+          **Upstream**: [\`${UPSTREAM_TAG}\`](https://github.com/meganz/MEGAsync/releases/tag/${UPSTREAM_TAG})
+          **Built**: ${TODAY}
+          **Platform**: Windows x64
+          EOF
+
+          gh release create "$RELEASE_TAG" \
+            --title "MEGAsync ${UPSTREAM_VERSION} (Win x64)" \
+            --notes-file body.md \
+            artifacts/megasync-win-${UPSTREAM_VERSION}.zip
+
+  # -------------------------------------------------------------------
+  # cleanup: keep 5 most recent releases
+  # -------------------------------------------------------------------
+  cleanup:
+    needs: [release]
+    if: always() && needs.release.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prune old releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/cleanup-releases.sh 5
