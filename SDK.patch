@@ -124,7 +124,7 @@ index d770e8f21..cc86b02d9 100644
              if (counters[tc.index()].remainingsum >= targetOutstanding)
              {
 diff --git a/src/transferslot.cpp b/src/transferslot.cpp
-index af3bfecbb..74bfbf7fd 100644
+index af3bfecbb..c4de7a9e0 100644
 --- a/src/transferslot.cpp
 +++ b/src/transferslot.cpp
 @@ -98,7 +98,7 @@ const dstime TransferSlot::PROGRESSTIMEOUT = 10;
@@ -132,7 +132,7 @@ index af3bfecbb..74bfbf7fd 100644
  #endif
  
 -const m_off_t TransferSlot::MAX_REQ_SIZE_NEW_RAID = 2 * 1024 * 1024; // 2 MB for each raidpart
-+const m_off_t TransferSlot::MAX_REQ_SIZE_NEW_RAID = 32 * 1024 * 1024; // 32 MB for each raidpart
++const m_off_t TransferSlot::MAX_REQ_SIZE_NEW_RAID = 8 * 1024 * 1024; // 8 MB for each raidpart
  const m_off_t TransferSlot::UPPER_FILESIZE_LIMIT_FOR_SMALLER_CHUNKS = 25 * 1024 * 1024; // 25 MB
  const m_off_t TransferSlot::MIN_FILESIZE_FOR_MULTIPLE_CONNECTIONS = 131072 + 1; // 128 KB + 1 -> legacy value
  const m_off_t TransferSlot::MAX_GAP_SIZE = 256 * 1024 * 1024; // 256 MB
