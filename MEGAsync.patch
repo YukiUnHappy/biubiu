@@ -275,11 +275,23 @@ index 0000000..b547e1c
 +# TODO: Replace with block() when we use a version of cmake that supports it (3.26+)
 +_o3de_compiler_launcher()
 +unset(_o3de_compiler_launcher)
+diff --git a/cmake/modules/desktopapp_initial_configuration.cmake b/cmake/modules/desktopapp_initial_configuration.cmake
+index 72da7b3..3c9070a 100644
+--- a/cmake/modules/desktopapp_initial_configuration.cmake
++++ b/cmake/modules/desktopapp_initial_configuration.cmake
+@@ -26,6 +26,6 @@ if(CMAKE_HOST_APPLE)
+ 
+ endif()
+ 
+-if (WIN32)
++if (WIN32 AND CMAKE_GENERATOR MATCHES "Visual Studio")
+     set(CMAKE_GENERATOR_TOOLSET "v143")
+ endif()
 diff --git a/full_build_process.cmd b/full_build_process.cmd
-index bc17739..08e1871 100644
+index 215dd50..ca2586d 100644
 --- a/full_build_process.cmd
 +++ b/full_build_process.cmd
-@@ -100,12 +100,12 @@ IF EXIST build-x86-windows-mega (
+@@ -116,12 +116,12 @@ IF EXIST build-x86-windows-mega (
  )
  
  REM Build installers
@@ -350,3 +362,34 @@ index b3ad269..5e1cc7f 100644
 -	|| exit 1 /b
 +	|| exit /b 1
  cd ..
+diff --git a/src/MEGASync/CMakeLists.txt b/src/MEGASync/CMakeLists.txt
+index ff87693..ea739d8 100644
+--- a/src/MEGASync/CMakeLists.txt
++++ b/src/MEGASync/CMakeLists.txt
+@@ -156,6 +156,10 @@ target_link_libraries(MEGAsync
+     Qt5::QuickWidgets
+ )
+ 
++if (CMAKE_GENERATOR MATCHES "Ninja")
++    target_link_libraries(MEGAsync PRIVATE windowsapp)
++endif()
++
+ ## Adjust compilation flags for warnings and errors ##
+ target_platform_compile_options(
+     TARGET MEGAsync
+@@ -231,4 +235,3 @@ if(TARGET gfxworker)
+         COMMENT "Copying gfxworker for MEGAsync."
+     )
+ endif()
+-
+diff --git a/src/MEGASync/syncs/control/MegaIgnoreManager.cpp b/src/MEGASync/syncs/control/MegaIgnoreManager.cpp
+index 8cc94cb..200dd7f 100644
+--- a/src/MEGASync/syncs/control/MegaIgnoreManager.cpp
++++ b/src/MEGASync/syncs/control/MegaIgnoreManager.cpp
+@@ -1,3 +1,6 @@
++// FIX error C2220: the following warning is treated as an error
++#define _SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING
++
+ #include "MegaIgnoreManager.h"
+ 
+ #include "MegaApplication.h"

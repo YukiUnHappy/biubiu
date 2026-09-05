@@ -24,6 +24,21 @@ index ad102d9cc..8707f5c6c 100644
  
      # Check if our toolchain supports TI emulation mode.
      try_compile(SUPPORTS_TI_EMULATION_MODE
+diff --git a/cmake/modules/sdklib_variables.cmake b/cmake/modules/sdklib_variables.cmake
+index d3e7d3548..a30bcdf54 100644
+--- a/cmake/modules/sdklib_variables.cmake
++++ b/cmake/modules/sdklib_variables.cmake
+@@ -8,7 +8,9 @@ if (NOT WIN32)
+     set(USE_CPPTHREAD 0)
+ else()
+     set(USE_CPPTHREAD 1)
+-    set(CMAKE_GENERATOR_TOOLSET "v142")
++    if (CMAKE_GENERATOR MATCHES "Visual Studio")
++        set(CMAKE_GENERATOR_TOOLSET "v142")
++    endif()
+ endif()
+ 
+ include(detect_host_architecture)
 diff --git a/cmake/vcpkg_overlay_triplets/x64-windows-mega.cmake b/cmake/vcpkg_overlay_triplets/x64-windows-mega.cmake
 index 49ec26f19..e4167b4e5 100644
 --- a/cmake/vcpkg_overlay_triplets/x64-windows-mega.cmake
@@ -52,8 +67,23 @@ index 49ec26f19..e4167b4e5 100644
 +    set(VCPKG_C_FLAGS_RELEASE "/GL /Gw /GS-")
 +    set(VCPKG_LINKER_FLAGS_RELEASE "/PDBALTPATH:%_PDB% /OPT:ICF=3 /OPT:REF /LTCG")
  endif()
+diff --git a/src/command.cpp b/src/command.cpp
+index dd4e88fa0..748dedcea 100644
+--- a/src/command.cpp
++++ b/src/command.cpp
+@@ -241,8 +241,8 @@ void Command::cacheresolvedurls(const std::string& command,
+     // Not enough IPs for each URI.
+     if (updated < 0)
+     {
+-        LOG_err << "Unpaired IPs received for URLs in `" << command << "`. URLs: " << urls.size()
+-                << " IPs: " << ips.size();
++        // LOG_err << "Unpaired IPs received for URLs in `" << command << "`. URLs: " << urls.size()
++        //         << " IPs: " << ips.size();
+ 
+         return;
+     }
 diff --git a/src/megaclient.cpp b/src/megaclient.cpp
-index d770e8f21..cc86b02d9 100644
+index 3187932e3..88208325a 100644
 --- a/src/megaclient.cpp
 +++ b/src/megaclient.cpp
 @@ -66,7 +66,7 @@ namespace mega {
@@ -65,7 +95,7 @@ index d770e8f21..cc86b02d9 100644
  
  // root URL for API access
  // MegaClient statics must be const or we get threading problems.  And this one is edited so it can't be const.
-@@ -4158,34 +4158,6 @@ void MegaClient::dispatchTransfers()
+@@ -4291,34 +4291,6 @@ void MegaClient::dispatchTransfers()
  
      auto calcTransferWeight = [this, &calcDynamicQueueLimit](mega::direction_t transferDirection, bool forceDynamicLimit = false) -> double
      {
@@ -100,7 +130,7 @@ index d770e8f21..cc86b02d9 100644
          return 1;
      };
  
-@@ -4251,16 +4223,16 @@ void MegaClient::dispatchTransfers()
+@@ -4384,16 +4356,16 @@ void MegaClient::dispatchTransfers()
              TransferCategory tc(t);
  
              // If we have one very big file, that is enough to max out the bandwidth by itself; get that one done quickly (without preventing more small files).
@@ -123,16 +153,28 @@ index d770e8f21..cc86b02d9 100644
  
              if (counters[tc.index()].remainingsum >= targetOutstanding)
              {
+@@ -19927,6 +19899,8 @@ error MegaClient::getRecentActionById(const char* id, bool excludeSensitives, re
+ // a chunk transfer request failed: record failed protocol & host
+ void MegaClient::setchunkfailed(string* url)
+ {
++    return;
++
+     if (!chunkfailed && url->size() > 19)
+     {
+         LOG_debug << "Adding badhost report for URL " << *url;
 diff --git a/src/transferslot.cpp b/src/transferslot.cpp
-index af3bfecbb..c4de7a9e0 100644
+index af3bfecbb..1ad957d12 100644
 --- a/src/transferslot.cpp
 +++ b/src/transferslot.cpp
-@@ -98,7 +98,7 @@ const dstime TransferSlot::PROGRESSTIMEOUT = 10;
+@@ -98,7 +98,10 @@ const dstime TransferSlot::PROGRESSTIMEOUT = 10;
      const m_off_t TransferSlot::MAX_REQ_SIZE = 16777216; // 16 MB [Previous value: 4194304 -> 4 MB]
  #endif
  
 -const m_off_t TransferSlot::MAX_REQ_SIZE_NEW_RAID = 2 * 1024 * 1024; // 2 MB for each raidpart
-+const m_off_t TransferSlot::MAX_REQ_SIZE_NEW_RAID = 8 * 1024 * 1024; // 8 MB for each raidpart
++// maxReqSize = MAX_REQ_SIZE_NEW_RAID * 5 (EFFECTIVE_RAIDPARTS)  * 4 (AVERAGE_NUMBER_OF_TRANSFERSLOT_CONNECTIONS) / connections
++// maxReqSize = chunkceil(maxReqSize) = (maxReqSize - 4.5MB) / 1MB + 4.5MB + 1MB
++// (transfer->pos + maxReqSize) % 80 (RAIDLINE) == 0
++const m_off_t TransferSlot::MAX_REQ_SIZE_NEW_RAID = 12 * 1024 * 1024; // 6.5 MB for each raidpart (connections = 8)
  const m_off_t TransferSlot::UPPER_FILESIZE_LIMIT_FOR_SMALLER_CHUNKS = 25 * 1024 * 1024; // 25 MB
  const m_off_t TransferSlot::MIN_FILESIZE_FOR_MULTIPLE_CONNECTIONS = 131072 + 1; // 128 KB + 1 -> legacy value
  const m_off_t TransferSlot::MAX_GAP_SIZE = 256 * 1024 * 1024; // 256 MB

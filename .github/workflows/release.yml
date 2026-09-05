@@ -85,7 +85,7 @@ jobs:
         run: |
           mkdir vcpkg_cache
           cd build-src
-          git apply --ignore-whitespace "${{ github.workspace }}/MEGASync.patch"
+          git apply --ignore-whitespace "${{ github.workspace }}/MEGAsync.patch"
           cd src/MEGASync/mega
           git apply --ignore-whitespace "${{ github.workspace }}/SDK.patch"
 
@@ -117,7 +117,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: megasync-win-${{ needs.detect-upstream.outputs.upstream-version }}
-          path: build-src/build-x64-windows-mega/src/MEGASync/RelWithDebInfo/MEGASync.*
+          path: build-src/build-x64-windows-mega/src/MEGASync/RelWithDebInfo/MEGAsync.*
           if-no-files-found: error
           retention-days: 30
 
