@@ -363,14 +363,14 @@ index b3ad269..5e1cc7f 100644
 +	|| exit /b 1
  cd ..
 diff --git a/src/MEGASync/CMakeLists.txt b/src/MEGASync/CMakeLists.txt
-index ff87693..ea739d8 100644
+index ff87693..12a567f 100644
 --- a/src/MEGASync/CMakeLists.txt
 +++ b/src/MEGASync/CMakeLists.txt
 @@ -156,6 +156,10 @@ target_link_libraries(MEGAsync
      Qt5::QuickWidgets
  )
  
-+if (CMAKE_GENERATOR MATCHES "Ninja")
++if (MSVC AND CMAKE_GENERATOR MATCHES "Ninja")
 +    target_link_libraries(MEGAsync PRIVATE windowsapp)
 +endif()
 +

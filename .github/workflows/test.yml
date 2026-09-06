@@ -2,9 +2,25 @@ name: Test Build
 
 on:
   workflow_dispatch:
+    inputs:
+      build:
+        description: Build type
+        type: choice
+        options:
+          - Only Ninja
+          - Only MSBuild
+          - Both
+        required: true
+        default: Only Ninja
+      tag:
+        description: MEGAsync tag
+        type: string
+        required: true
+        default: v6.6.1.0_Win
 
 jobs:
   ninja_build:
+    if: ${{ inputs.build == 'Only Ninja' || inputs.build == 'Both' }}
     runs-on: windows-2022
     env:
       SCCACHE_GHA_ENABLED: 'true'
@@ -16,7 +32,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: meganz/MEGAsync
-          ref: v6.6.1.0_Win
+          ref: ${{ inputs.tag }}
           path: build-src
 
       - name: Init submodules
@@ -109,7 +125,7 @@ jobs:
           path: build-src/build-x64-windows-mega/src/MEGASync/MEGAsync.*
 
   msbuild_build:
-    if: false
+    if: ${{ inputs.build == 'Only MSBuild' || inputs.build == 'Both' }}
     runs-on: windows-2022
     env:
       SCCACHE_GHA_ENABLED: 'true'
@@ -121,7 +137,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: meganz/MEGAsync
-          ref: v6.6.1.0_Win
+          ref: ${{ inputs.tag }}
           path: build-src
 
       - name: Init submodules
