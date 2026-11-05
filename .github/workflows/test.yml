@@ -19,7 +19,7 @@ on:
         default: v6.6.1.0_Win
 
 jobs:
-  ninja_build:
+  ninja-build:
     if: ${{ inputs.build == 'Only Ninja' || inputs.build == 'Both' }}
     runs-on: windows-2022
     env:
@@ -124,7 +124,7 @@ jobs:
           name: MEGAsync binary
           path: build-src/build-x64-windows-mega/src/MEGASync/MEGAsync.*
 
-  msbuild_build:
+  msbuild-build:
     if: ${{ inputs.build == 'Only MSBuild' || inputs.build == 'Both' }}
     runs-on: windows-2022
     env:

@@ -1,5 +1,5 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 5aeae3216..c7c5ebbee 100644
+index 5aeae32..d5e1a0c 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -163,7 +163,7 @@ if(ENABLE_JAVA_BINDINGS)
@@ -12,7 +12,7 @@ index 5aeae3216..c7c5ebbee 100644
  
  ## Load examples and tests
 diff --git a/cmake/modules/configuration.cmake b/cmake/modules/configuration.cmake
-index ad102d9cc..8707f5c6c 100644
+index ad102d9..07b5046 100644
 --- a/cmake/modules/configuration.cmake
 +++ b/cmake/modules/configuration.cmake
 @@ -38,7 +38,7 @@ else()
@@ -25,7 +25,7 @@ index ad102d9cc..8707f5c6c 100644
      # Check if our toolchain supports TI emulation mode.
      try_compile(SUPPORTS_TI_EMULATION_MODE
 diff --git a/cmake/modules/sdklib_variables.cmake b/cmake/modules/sdklib_variables.cmake
-index d3e7d3548..a30bcdf54 100644
+index d3e7d35..28d656f 100644
 --- a/cmake/modules/sdklib_variables.cmake
 +++ b/cmake/modules/sdklib_variables.cmake
 @@ -8,7 +8,9 @@ if (NOT WIN32)
@@ -40,7 +40,7 @@ index d3e7d3548..a30bcdf54 100644
  
  include(detect_host_architecture)
 diff --git a/cmake/vcpkg_overlay_triplets/x64-windows-mega.cmake b/cmake/vcpkg_overlay_triplets/x64-windows-mega.cmake
-index 49ec26f19..e4167b4e5 100644
+index 49ec26f..f2c60f1 100644
 --- a/cmake/vcpkg_overlay_triplets/x64-windows-mega.cmake
 +++ b/cmake/vcpkg_overlay_triplets/x64-windows-mega.cmake
 @@ -4,10 +4,12 @@ find_visual_studio_path()
@@ -68,7 +68,7 @@ index 49ec26f19..e4167b4e5 100644
 +    set(VCPKG_LINKER_FLAGS_RELEASE "/PDBALTPATH:%_PDB% /OPT:ICF=3 /OPT:REF /LTCG")
  endif()
 diff --git a/src/command.cpp b/src/command.cpp
-index dd4e88fa0..748dedcea 100644
+index dd4e88f..92fac47 100644
 --- a/src/command.cpp
 +++ b/src/command.cpp
 @@ -241,8 +241,8 @@ void Command::cacheresolvedurls(const std::string& command,
@@ -83,10 +83,10 @@ index dd4e88fa0..748dedcea 100644
          return;
      }
 diff --git a/src/megaclient.cpp b/src/megaclient.cpp
-index 3187932e3..88208325a 100644
+index 30be643..ea92a97 100644
 --- a/src/megaclient.cpp
 +++ b/src/megaclient.cpp
-@@ -66,7 +66,7 @@ namespace mega {
+@@ -67,7 +67,7 @@ namespace mega {
  
  
  // default for disable public key pinning (for testing purposes) (determines if we check the public key from APIURL)
@@ -95,42 +95,16 @@ index 3187932e3..88208325a 100644
  
  // root URL for API access
  // MegaClient statics must be const or we get threading problems.  And this one is edited so it can't be const.
-@@ -4291,34 +4291,6 @@ void MegaClient::dispatchTransfers()
+@@ -4305,6 +4305,8 @@ unsigned MegaClient::calcDynamicQueueLimit() const
  
-     auto calcTransferWeight = [this, &calcDynamicQueueLimit](mega::direction_t transferDirection, bool forceDynamicLimit = false) -> double
-     {
--        if (transferDirection == GET &&
--            ((raidTransfersCounter >= MEANINGFUL_PORTION_OF_MAXTRANSFERS_QUEUE_FOR_RAID_PREDICTIVE_SYSTEM) // 1/6 of the hard limit
--            || forceDynamicLimit))
--        {
--            double averageFileSize = 0;
--            for (TransferSlot* ts : tslots)
--            {
--                averageFileSize += (static_cast<double>(ts->transfer->size) / static_cast<double>(tslots.size())); // Take into account VERY LARGE FILE SIZES, that's why I divide for each iteration and not at the end
--            }
--            unsigned dynamicQueueLimit;
--            const unsigned maxAverageFilesizeForFixedLimit = 2 * 1024 * 1024; // 2MB, it's better to used a fixed limit (and a larger queue max size) for transfer queues whose average filesize is smaller than this value
--            if (static_cast<unsigned>(averageFileSize) <= maxAverageFilesizeForFixedLimit) // Truncate double averageFileSize (2,x MB ≡ 2MB)
--            {
--#if defined(__ANDROID__) || defined(USE_IOS)
--                dynamicQueueLimit = MAX_RAIDTRANSFERS_FOR_MOBILE;
--#else
--                dynamicQueueLimit = MAXTRANSFERS + 10;
--#endif
--            }
--            else
--            {
--                dynamicQueueLimit = calcDynamicQueueLimit();
--            }
--            double transferWeight =
--                static_cast<double>(MAXTRANSFERS) / static_cast<double>(dynamicQueueLimit);
--            //LOG_verbose << "[calcTransferWeight] raidTransfersCounter = " << raidTransfersCounter << ", >= " << MEANINGFUL_PORTION_OF_MAXTRANSFERS_QUEUE_FOR_RAID_PREDICTIVE_SYSTEM << " -> transferWeight = " << transferWeight << " [tslots = " << tslots.size() << "] [dynamicQueueLimit = " << dynamicQueueLimit << "] [averageFileSize = " << (averageFileSize / 1024) << " KBs]";
--            return transferWeight;
--        }
-         return 1;
-     };
- 
-@@ -4384,16 +4356,16 @@ void MegaClient::dispatchTransfers()
+ double MegaClient::calcTransferWeight(direction_t transferDirection, bool forceDynamicLimit) const
+ {
++    return 1;
++
+     if (transferDirection == GET &&
+         ((raidTransfersCounter >= MEANINGFUL_PORTION_OF_MAXTRANSFERS_QUEUE_FOR_RAID_PREDICTIVE_SYSTEM) ||
+          forceDynamicLimit))
+@@ -4478,16 +4480,16 @@ void MegaClient::dispatchTransfers()
              TransferCategory tc(t);
  
              // If we have one very big file, that is enough to max out the bandwidth by itself; get that one done quickly (without preventing more small files).
@@ -153,7 +127,7 @@ index 3187932e3..88208325a 100644
  
              if (counters[tc.index()].remainingsum >= targetOutstanding)
              {
-@@ -19927,6 +19899,8 @@ error MegaClient::getRecentActionById(const char* id, bool excludeSensitives, re
+@@ -20334,6 +20336,8 @@ error MegaClient::getRecentActionById(const char* id, bool excludeSensitives, re
  // a chunk transfer request failed: record failed protocol & host
  void MegaClient::setchunkfailed(string* url)
  {
@@ -163,7 +137,7 @@ index 3187932e3..88208325a 100644
      {
          LOG_debug << "Adding badhost report for URL " << *url;
 diff --git a/src/transferslot.cpp b/src/transferslot.cpp
-index af3bfecbb..1ad957d12 100644
+index 689cdd8..7ba8fd4 100644
 --- a/src/transferslot.cpp
 +++ b/src/transferslot.cpp
 @@ -98,7 +98,10 @@ const dstime TransferSlot::PROGRESSTIMEOUT = 10;
